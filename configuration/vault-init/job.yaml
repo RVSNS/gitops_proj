@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-init-job
+  namespace: vault
+spec:
+  template:
+    spec:
+      serviceAccountName: vault-auto-unseal
+      restartPolicy: OnFailure
+      containers:
+        - name: unsealer
+          image: bitnami/kubectl:latest
+          command: ["/bin/bash", "/scripts/init-unseal.sh"]
+          volumeMounts:
+            - name: script-vol
+              mountPath: /scripts
+      volumes:
+        - name: script-vol
+          configMap:
+            name: vault-unseal-script
+            defaultMode: 0755
