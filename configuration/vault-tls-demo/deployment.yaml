@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-tls-demo
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-tls-demo
+  template:
+    metadata:
+      labels:
+        app: vault-tls-demo
+    spec:
+      serviceAccountName: vault-tls-demo
+      containers:
+        - name: vault-tls-demo
+          image: vault-tls-demo-app:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+          env:
+            - name: VAULT_ADDR
+              value: http://vault.vault.svc.cluster.local:8200
+            - name: VAULT_K8S_ROLE
+              value: vault-tls-demo
+            - name: VAULT_KV_PATH
+              value: vault-tls-demo/config
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /etc/certs
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8443
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8443
+              scheme: HTTPS
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: demo-cert-tls

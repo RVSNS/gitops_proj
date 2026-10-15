@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: demo-cert
+  namespace: default
+spec:
+  secretName: demo-cert-tls
+  duration: 24h
+  renewBefore: 1h
+  commonName: demo.gitops.local
+  dnsNames:
+    - demo.gitops.local
+  issuerRef:
+    name: vault-issuer
+    kind: ClusterIssuer
