@@ -5,6 +5,9 @@ POD="vault-0"
 echo "Waiting for $POD to be Ready..."
 kubectl wait --for=condition=Ready pod/$POD -n $NAMESPACE --timeout=120s
 
+echo "Pod is ready. Sleeping for 30 seconds before starting PKI configuration..."
+sleep 30
+
 # Retrieve the root token from the k8s secret
 ROOT_TOKEN=$(kubectl get secret vault-keys -n $NAMESPACE -o jsonpath='{.data.root-token}' | base64 -d)
 EXEC="kubectl exec $POD -n $NAMESPACE -- env VAULT_TOKEN=$ROOT_TOKEN vault"

@@ -4,6 +4,9 @@ VAULT_API="http://vault.vault.svc.cluster.local:8200/v1/sys"
 echo "Waiting for Vault API..."
 while ! curl -s $VAULT_API/health > /dev/null; do sleep 2; done
 
+echo "Vault API is up. Sleeping for 30 seconds to allow observation..."
+sleep 30
+
 INIT_STATUS=$(curl -s $VAULT_API/init | jq -r '.initialized')
 
 if [ "$INIT_STATUS" = "false" ]; then
