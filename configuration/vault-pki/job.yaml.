@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-config-job
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      serviceAccountName: vault-auto-unseal
+      restartPolicy: OnFailure
+      containers:
+        - name: configurator
+          image: bitnami/kubectl:latest
+          command: ["/bin/bash", "/scripts/config-vault.sh"]
+          volumeMounts:
+            - name: script-vol
+              mountPath: /scripts
+      volumes:
+        - name: script-vol
+          configMap:
+            name: vault-config-script
+            defaultMode: 0755
