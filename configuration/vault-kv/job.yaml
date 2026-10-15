@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: vault-tls-demo-config-job
+  name: vault-kv-setup-job
   namespace: vault
   annotations:
     argocd.argoproj.io/hook: Sync
@@ -12,14 +12,14 @@ spec:
       serviceAccountName: vault-auto-unseal
       restartPolicy: OnFailure
       containers:
-        - name: configurator
+        - name: kv-setup
           image: bitnami/kubectl:latest
-          command: ["/bin/bash", "/scripts/config-kv.sh"]
+          command: ["/bin/bash", "/scripts/enable-kv.sh"]
           volumeMounts:
             - name: script-vol
               mountPath: /scripts
       volumes:
         - name: script-vol
           configMap:
-            name: vault-tls-demo-config-script
+            name: vault-kv-setup-script
             defaultMode: 0755

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6" # Generic per-app policy/role sync, independent of any single app's deploy
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/RVSNS/gitops_proj.git'
+    targetRevision: HEAD
+    path: configuration/vault-policies
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

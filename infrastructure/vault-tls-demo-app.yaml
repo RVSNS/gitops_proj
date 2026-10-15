@@ -4,13 +4,13 @@ metadata:
   name: vault-tls-demo
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-wave: "7" # App workload: deploys after KV engine + policies are in place
 spec:
   project: default
   source:
     repoURL: 'https://github.com/RVSNS/gitops_proj.git'
     targetRevision: HEAD
-    path: configuration/vault-tls-demo
+    path: apps/vault-tls-demo
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default

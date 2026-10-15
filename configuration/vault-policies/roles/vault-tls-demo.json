@@ -1,0 +1,6 @@
+{
+  "role": "vault-tls-demo",
+  "bound_service_account_names": "vault-tls-demo",
+  "bound_service_account_namespaces": "default",
+  "ttl": "24h"
+}
