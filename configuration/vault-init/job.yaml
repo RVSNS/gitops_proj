@@ -3,6 +3,11 @@ kind: Job
 metadata:
   name: vault-init-job
   namespace: vault
+  annotations:
+    # 1. Tell ArgoCD this is a PostSync hook
+    argocd.argoproj.io/hook: PostSync
+    # 2. Tell ArgoCD to delete the Job pod after it succeeds
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   template:
     spec:

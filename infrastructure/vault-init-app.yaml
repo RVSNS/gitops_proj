@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault-configuration
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3" # Runs after Vault is deployed
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/YOUR_USERNAME/YOUR_REPO.git'
+    targetRevision: HEAD
+    path: configuration/vault-init
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
