@@ -5,10 +5,13 @@ metadata:
   namespace: argocd
 spec:
   project: default
-  source:
-    repoURL: 'https://github.com/RVSNS/gitops_proj.git'
-    targetRevision: master
-    path: infrastructure
+  sources:
+    - repoURL: 'https://github.com/RVSNS/gitops_proj.git'
+      targetRevision: master
+      path: infrastructure
+    - repoURL: 'https://github.com/RVSNS/gitops_proj.git'
+      targetRevision: master
+      path: applications
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
