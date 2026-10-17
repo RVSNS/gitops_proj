@@ -28,7 +28,9 @@ for role_file in "$DEFS_DIR"/*.json; do
   ttl=$(jq -r '.ttl' "$role_file")
 
   echo "Writing Vault policy '$policy_name' from $policy_file..."
-  kubectl cp "$policy_file" "$NAMESPACE/$POD:/tmp/${policy_name}.hcl"
+  # ConfigMap-mounted files are symlinks; dereference before cp so the pod gets real content, not a dangling link.
+  cp -L "$policy_file" "/tmp/${policy_name}.hcl"
+  kubectl cp "/tmp/${policy_name}.hcl" "$NAMESPACE/$POD:/tmp/${policy_name}.hcl"
   $EXEC policy write "$policy_name" "/tmp/${policy_name}.hcl"
 
   echo "Writing Kubernetes auth role '$role_name' (sa=$bound_sa ns=$bound_ns, ttl=$ttl)..."
