@@ -8,10 +8,7 @@ spec:
   sources:
     - repoURL: 'https://github.com/RVSNS/gitops_proj.git'
       targetRevision: master
-      path: infrastructure
-    - repoURL: 'https://github.com/RVSNS/gitops_proj.git'
-      targetRevision: master
-      path: applications
+      path: infra
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default

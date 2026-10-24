@@ -1,6 +1,0 @@
-# Identity the running app authenticates to Vault's kubernetes auth method as.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: vault-tls-demo
-  namespace: default
