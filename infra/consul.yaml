@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: consul
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  source:
+    repoURL: https://helm.releases.hashicorp.com
+    chart: consul
+    targetRevision: 2.1.0
+    helm:
+      releaseName: consul
+      valuesObject:
+        global:
+          name: consul
+          datacenter: dc1
+          argocd:
+            enabled: true
+          acls:
+            manageSystemACLs: true
+          gossipEncryption:
+            autoGenerate: true
+          tls:
+            enabled: true
+            verify: true
+            httpsOnly: true
+        server:
+          enabled: true
+          replicas: 1
+          bootstrapExpect: 1
+          storage: 1Gi
+        client:
+          enabled: false
+        connectInject:
+          enabled: false
+        ui:
+          enabled: true
+          service:
+            type: ClusterIP
+        tests:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: consul
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
