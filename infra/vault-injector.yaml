@@ -19,6 +19,8 @@ spec:
           tlsDisable: false
         server:
           enabled: false
+          authDelegator:
+            enabled: false
         injector:
           enabled: true
           agentImage:
@@ -31,9 +33,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: vault
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: vault-injector-agent-injector-cfg
+      jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - RespectIgnoreDifferences=true

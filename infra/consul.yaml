@@ -4,7 +4,7 @@ metadata:
   name: consul
   namespace: argocd
   annotations:
-    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-wave: "5"
     argocd.argoproj.io/compare-options: ServerSideDiff=true
 spec:
   project: default
@@ -22,14 +22,56 @@ spec:
             enabled: true
           acls:
             manageSystemACLs: true
+            bootstrapToken:
+              secretName: secret/data/consul/bootstrap
+              secretKey: token
           gossipEncryption:
-            autoGenerate: true
+            autoGenerate: false
+            secretName: secret/data/consul/gossip
+            secretKey: key
+          secretsBackend:
+            vault:
+              enabled: true
+              consulServerRole: consul-server
+              consulClientRole: consul-client
+              consulCARole: consul-ca
+              manageSystemACLsRole: consul-acl-init
+              featureGateSetRole: consul-feature-gate
+              ca:
+                secretName: vault-tls
+                secretKey: ca.crt
+              connectCA:
+                address: https://vault.vault.svc:8200
+                rootPKIPath: pki
+                intermediatePKIPath: pki_consul
+                additionalConfig: |
+                  {
+                    "connect": [{
+                      "ca_config": [{
+                        "intermediate_cert_ttl": "168h",
+                        "leaf_cert_ttl": "24h"
+                      }]
+                    }]
+                  }
           tls:
             enabled: true
             verify: true
             httpsOnly: true
+            enableAutoEncrypt: true
+            caCert:
+              secretName: pki/cert/ca
+            serverAdditionalDNSSANs:
+              - consul-server.consul.svc.cluster.local
+              - consul-ui.consul.svc
+              - consul-ui.consul.svc.cluster.local
         server:
           enabled: true
+          # The internal CA is needed for client auto-encryption, not mesh injection.
+          connect: true
+          serverCert:
+            secretName: pki/issue/consul-server
+          extraConfig: |
+            {"auto_reload_config": true}
           replicas: 1
           bootstrapExpect: 1
           storage: 1Gi
