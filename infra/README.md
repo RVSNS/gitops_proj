@@ -6,8 +6,11 @@
 Argo CD into the `consul` namespace. Server-side comparison accounts for
 Kubernetes-defaulted StatefulSet fields without ignoring configuration drift.
 
-- One server agent, with `bootstrapExpect: 1` and a 1 GiB PVC. A Consul server
-  is already an agent; no separate client-agent DaemonSet is deployed.
+- One server agent, with `bootstrapExpect: 1` and a 1 GiB PVC.
+- Client agents run as the chart-managed `consul-client` DaemonSet, one per
+  eligible node. They join the single server and inherit the global ACL,
+  gossip encryption, and TLS settings. Clients do not add voting servers or
+  improve server failure tolerance.
 - ACLs are automatically bootstrapped with a default-deny policy. The bootstrap
   management token is stored in `consul/consul-bootstrap-acl-token` (`token`).
   Keep this administrative token private and issue scoped tokens for workloads.
@@ -23,10 +26,16 @@ Kubernetes-defaulted StatefulSet fields without ignoring configuration drift.
 
 ```sh
 kubectl -n argocd get application consul
-kubectl -n consul get pods,pvc
+kubectl -n consul get pods,pvc,daemonsets
+kubectl -n consul rollout status daemonset/consul-client --timeout=300s
+kubectl -n consul exec consul-server-0 -- consul members
 ```
 
-Expect `Synced/Healthy`, one `consul-server-0` pod and a bound PVC.
+Expect `Synced/Healthy`, one `consul-server-0` pod, a bound PVC, and one ready
+`consul-client` pod per eligible node. The member list should show one server
+and the client agents, all `alive`. If ACLs deny membership inspection, use a
+token with `node:read` through `CONSUL_HTTP_TOKEN` inside the pod; do not put
+tokens in command arguments or commit them to Git.
 
 The UI is private (ClusterIP). For local access:
 

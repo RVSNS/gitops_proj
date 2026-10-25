@@ -34,7 +34,7 @@ spec:
           bootstrapExpect: 1
           storage: 1Gi
         client:
-          enabled: false
+          enabled: true
         connectInject:
           enabled: false
         ui:
