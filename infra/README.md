@@ -3,7 +3,8 @@
 ## Consul
 
 [consul.yaml](consul.yaml) deploys the official HashiCorp Helm chart through
-Argo CD into the `consul` namespace.
+Argo CD into the `consul` namespace. Server-side comparison accounts for
+Kubernetes-defaulted StatefulSet fields without ignoring configuration drift.
 
 - One server agent, with `bootstrapExpect: 1` and a 1 GiB PVC. A Consul server
   is already an agent; no separate client-agent DaemonSet is deployed.
