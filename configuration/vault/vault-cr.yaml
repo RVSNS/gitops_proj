@@ -17,6 +17,10 @@ spec:
   tlsAdditionalHosts:
     - vault.vault.svc
 
+  # Copies vault-tls (ca.crt only) for the cert-manager ClusterIssuer.
+  caNamespaces:
+    - cert-manager
+
   config:
     storage:
       file:
@@ -52,6 +56,27 @@ spec:
 
   # Declaratively mounts and configures kv-v2 and pki engines
   externalConfig:
+    policies:
+      - name: cert-manager
+        rules: |
+          path "pki/sign/cert-manager" {
+            capabilities = ["create", "update"]
+          }
+
+    auth:
+      - type: kubernetes
+        # Setting kubernetes_host skips the configurer's defaults, so Vault reviews
+        # tokens with its own auto-rotated service account token and cluster CA.
+        config:
+          kubernetes_host: https://kubernetes.default.svc
+        roles:
+          - name: cert-manager
+            bound_service_account_names: ["vault-issuer"]
+            bound_service_account_namespaces: ["cert-manager"]
+            audience: vault://vault-issuer
+            policies: ["cert-manager"]
+            ttl: 20m
+
     secrets:
       - path: secret
         type: kv
@@ -72,5 +97,15 @@ spec:
             - name: urls
               issuing_certificates: https://vault.vault.svc:8200/v1/pki/ca
               crl_distribution_points: https://vault.vault.svc:8200/v1/pki/crl
+          roles:
+            - name: cert-manager
+              allowed_domains: ["svc", "svc.cluster.local", "localhost"]
+              allow_subdomains: true
+              allow_localhost: true
+              allow_ip_sans: true
+              key_type: any
+              require_cn: false
+              ttl: 24h
+              max_ttl: 720h
 
   serviceType: ClusterIP

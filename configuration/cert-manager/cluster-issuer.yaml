@@ -1,0 +1,41 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: vault-issuer
+spec:
+  vault:
+    server: https://vault.vault.svc:8200
+    path: pki/sign/cert-manager
+    # The Vault operator copies ca.crt (only) into this namespace via caNamespaces.
+    caBundleSecretRef:
+      name: vault-tls
+      key: ca.crt
+    auth:
+      kubernetes:
+        role: cert-manager
+        mountPath: /v1/auth/kubernetes
+        serviceAccountRef:
+          name: vault-issuer
+---
+# Smoke test: should become Ready with a certificate chaining to the Vault root CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-issuer-smoke-test
+  namespace: cert-manager
+spec:
+  secretName: vault-issuer-smoke-test-tls
+  commonName: smoke-test.cert-manager.svc
+  dnsNames:
+    - smoke-test.cert-manager.svc
+    - smoke-test.cert-manager.svc.cluster.local
+  duration: 24h
+  renewBefore: 8h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: vault-issuer
