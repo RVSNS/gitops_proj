@@ -1,0 +1,186 @@
+# Restore ca.crt and ca.key into vault-tls before syncing a replacement cluster.
+# With no restored Secret this hook creates a NEW root, not a recovery of the old one.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-ca-bootstrap
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vault-ca-bootstrap
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["vault-tls"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vault-ca-bootstrap
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vault-ca-bootstrap
+subjects:
+  - kind: ServiceAccount
+    name: vault-ca-bootstrap
+    namespace: vault
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-ca-bootstrap
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      serviceAccountName: vault-ca-bootstrap
+      restartPolicy: Never
+      volumes:
+        - name: certificates
+          emptyDir:
+            medium: Memory
+      initContainers:
+        - name: restore
+          image: alpine/k8s:1.35.0
+          command: ["/bin/bash", "-euo", "pipefail", "-c"]
+          args:
+            - |
+              umask 077
+              cd /certificates
+              kubectl -n vault get secret vault-tls --ignore-not-found -o json > existing.json
+              if [ -s existing.json ]; then
+                jq -e '.data["ca.crt"] != null and .data["ca.key"] != null' existing.json > /dev/null || {
+                  echo "vault-tls must contain both ca.crt and ca.key; refusing to replace the CA." >&2
+                  exit 1
+                }
+                for key in ca.crt ca.key; do
+                  jq -er --arg key "$key" '.data[$key] | select(length > 0)' existing.json |
+                    base64 -d > "$key"
+                done
+                if jq -e '.data["server.crt"] != null or .data["server.key"] != null' existing.json > /dev/null; then
+                  jq -e '.data["server.crt"] != null and .data["server.key"] != null' existing.json > /dev/null || {
+                    echo "Restore both server.crt and server.key, or neither." >&2
+                    exit 1
+                  }
+                  for key in server.crt server.key; do
+                    jq -er --arg key "$key" '.data[$key] | select(length > 0)' existing.json |
+                      base64 -d > "$key"
+                  done
+                fi
+                echo "Reusing the existing CA; it will not be replaced."
+              else
+                echo "No vault-tls Secret found; bootstrapping a new root CA."
+              fi
+          volumeMounts:
+            - name: certificates
+              mountPath: /certificates
+        - name: certificates
+          image: alpine/openssl:3.5.0
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              umask 077
+              cd /certificates
+              if [ ! -s existing.json ]; then
+                openssl req -x509 -newkey rsa:3072 -nodes -days 3650 \
+                  -subj "/CN=Vault Root CA" \
+                  -addext "basicConstraints=critical,CA:TRUE" \
+                  -addext "keyUsage=critical,keyCertSign,cRLSign" \
+                  -addext "subjectKeyIdentifier=hash" \
+                  -keyout ca.key -out ca.crt
+              fi
+
+              # The operator requires PKCS#1 RSA keys, not OpenSSL 3's PKCS#8 default.
+              openssl rsa -in ca.key -traditional -out ca-normalized.key
+              if ! cmp -s ca.key ca-normalized.key; then
+                mv ca-normalized.key ca.key
+                touch publish
+              fi
+              openssl verify -CAfile ca.crt ca.crt
+              openssl x509 -in ca.crt -checkend 604800 -noout || {
+                echo "Root CA expires within 7 days; perform a planned CA rotation." >&2
+                exit 1
+              }
+              openssl x509 -in ca.crt -ext basicConstraints -noout > constraints.txt
+              grep -q 'CA:TRUE' constraints.txt || {
+                echo "Restored certificate is not a CA." >&2
+                exit 1
+              }
+              openssl x509 -in ca.crt -ext keyUsage -noout > usage.txt
+              if ! grep -q 'Certificate Sign' usage.txt || ! grep -q 'CRL Sign' usage.txt; then
+                echo "Root CA must allow certificate signing and CRL signing." >&2
+                exit 1
+              fi
+              openssl x509 -in ca.crt -pubkey -noout > cert.pub
+              openssl pkey -in ca.key -pubout > key.pub
+              cmp cert.pub key.pub
+
+              if [ -f server.crt ]; then
+                openssl x509 -in server.crt -noout
+              fi
+              if [ ! -f server.crt ] || ! openssl x509 -in server.crt -checkend 604800 -noout; then
+                echo "Issuing a server certificate using the existing root CA."
+                printf '%s\n' \
+                  'basicConstraints=critical,CA:FALSE' \
+                  'keyUsage=critical,digitalSignature,keyEncipherment' \
+                  'extendedKeyUsage=serverAuth' \
+                  'subjectAltName=DNS:vault,DNS:vault.vault,DNS:vault.vault.svc,DNS:vault.vault.svc.cluster.local,IP:127.0.0.1' \
+                  > server.ext
+                openssl req -new -newkey rsa:2048 -nodes \
+                  -subj "/CN=vault.vault.svc" -keyout server.key -out server.csr
+                openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key \
+                  -CAcreateserial -days 365 -extfile server.ext -out server.crt
+                touch publish
+              fi
+              openssl verify -CAfile ca.crt -purpose sslserver \
+                -verify_hostname vault.vault.svc server.crt
+              openssl x509 -in server.crt -pubkey -noout > cert.pub
+              openssl pkey -in server.key -pubout > key.pub
+              cmp cert.pub key.pub
+          volumeMounts:
+            - name: certificates
+              mountPath: /certificates
+      containers:
+        - name: publish
+          image: alpine/k8s:1.35.0
+          command: ["/bin/bash", "-euo", "pipefail", "-c"]
+          args:
+            - |
+              umask 077
+              cd /certificates
+              if [ ! -s existing.json ]; then
+                kubectl -n vault create secret generic vault-tls \
+                  --from-file=ca.crt --from-file=ca.key \
+                  --from-file=server.crt --from-file=server.key
+              elif [ -f publish ]; then
+                kubectl -n vault create secret generic vault-tls \
+                  --from-file=ca.key --from-file=server.crt --from-file=server.key \
+                  --dry-run=client -o json | jq '{data: .data}' > patch.json
+                kubectl -n vault patch secret vault-tls --type=merge --patch-file=patch.json
+              else
+                echo "Existing CA and server certificate validated; Secret unchanged."
+              fi
+          volumeMounts:
+            - name: certificates
+              mountPath: /certificates

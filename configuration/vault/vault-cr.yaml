@@ -1,0 +1,76 @@
+apiVersion: vault.banzaicloud.com/v1alpha1
+kind: Vault
+metadata:
+  name: vault
+  namespace: vault
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  size: 1
+  image: hashicorp/vault:1.15.5
+  bankVaultsImage: ghcr.io/bank-vaults/bank-vaults:v1.30.0
+  serviceAccount: vault
+
+  # Bootstrap creates vault-tls; the operator reuses its CA for server renewals.
+  # Back up this Secret externally. Rotate the root deliberately before expiry;
+  # the operator's automatic CA replacement is not a staged PKI rotation.
+  tlsAdditionalHosts:
+    - vault.vault.svc
+
+  config:
+    storage:
+      file:
+        path: /vault/file
+    listener:
+      tcp:
+        address: "0.0.0.0:8200"
+        tls_cert_file: /vault/tls/server.crt
+        tls_key_file: /vault/tls/server.key
+    api_addr: https://vault.vault.svc:8200
+    ui: true
+
+  volumeMounts:
+    - name: vault-file
+      mountPath: /vault/file
+  volumeClaimTemplates:
+    - metadata:
+        name: vault-file
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+
+  # Automatic unsealing for local k3d development stored in a K8s secret
+  unsealConfig:
+    options:
+      preFlightChecks: true
+    kubernetes:
+      secretNamespace: vault
+      secretName: vault-unseal-keys
+
+  # Declaratively mounts and configures kv-v2 and pki engines
+  externalConfig:
+    secrets:
+      - path: secret
+        type: kv
+        description: "KV Version 2 engine"
+        options:
+          version: "2"
+      - path: pki
+        type: pki
+        description: "PKI using the operator-managed TLS root CA"
+        config:
+          default_lease_ttl: 24h
+          max_lease_ttl: 720h
+        configuration:
+          config:
+            - name: ca
+              # file escapes PEM newlines for the configurer's JSON template.
+              pem_bundle: '${ file `/vault/tls/ca.crt` }${ file `/vault/tls/ca.key` }'
+            - name: urls
+              issuing_certificates: https://vault.vault.svc:8200/v1/pki/ca
+              crl_distribution_points: https://vault.vault.svc:8200/v1/pki/crl
+
+  serviceType: ClusterIP
