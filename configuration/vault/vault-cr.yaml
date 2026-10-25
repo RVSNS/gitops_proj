@@ -17,9 +17,10 @@ spec:
   tlsAdditionalHosts:
     - vault.vault.svc
 
-  # Copies vault-tls (ca.crt only) for the cert-manager ClusterIssuer.
+  # Copies only the public CA certificate, never the root signing key.
   caNamespaces:
     - cert-manager
+    - consul
 
   config:
     storage:
@@ -62,6 +63,75 @@ spec:
           path "pki/sign/cert-manager" {
             capabilities = ["create", "update"]
           }
+      - name: consul-ca
+        rules: |
+          path "pki/cert/ca" {
+            capabilities = ["read"]
+          }
+      - name: consul-server
+        rules: |
+          path "pki/cert/ca" {
+            capabilities = ["read"]
+          }
+          path "pki/ca/pem" {
+            capabilities = ["read"]
+          }
+          path "pki/ca_chain" {
+            capabilities = ["read"]
+          }
+          path "pki/issue/consul-server" {
+            capabilities = ["create", "update"]
+          }
+          path "pki/root/sign-intermediate" {
+            capabilities = ["update"]
+          }
+          path "pki_consul/*" {
+            capabilities = ["create", "read", "update", "delete", "list"]
+          }
+          path "sys/mounts/pki_consul" {
+            capabilities = ["read"]
+          }
+          path "sys/mounts/pki_consul/tune" {
+            capabilities = ["read", "update"]
+          }
+          path "secret/data/consul/gossip" {
+            capabilities = ["read"]
+          }
+          path "secret/data/consul/bootstrap" {
+            capabilities = ["read"]
+          }
+      - name: consul-client
+        rules: |
+          path "pki/cert/ca" {
+            capabilities = ["read"]
+          }
+          path "secret/data/consul/gossip" {
+            capabilities = ["read"]
+          }
+      - name: consul-acl-init
+        rules: |
+          path "pki/cert/ca" {
+            capabilities = ["read"]
+          }
+          path "secret/data/consul/bootstrap" {
+            capabilities = ["read", "create", "update"]
+          }
+      - name: consul-feature-gate
+        rules: |
+          path "pki/cert/ca" {
+            capabilities = ["read"]
+          }
+          path "secret/data/consul/bootstrap" {
+            capabilities = ["read"]
+          }
+      - name: consul-credentials
+        rules: |
+          path "secret/data/consul/gossip" {
+            capabilities = ["read", "create", "update"]
+          }
+          path "secret/data/consul/bootstrap" {
+            capabilities = ["read", "create", "update"]
+          }
 
     auth:
       - type: kubernetes
@@ -76,6 +146,40 @@ spec:
             audience: vault://vault-issuer
             policies: ["cert-manager"]
             ttl: 20m
+          - name: consul-server
+            bound_service_account_names: ["consul-server"]
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-server"]
+            ttl: 1h
+          - name: consul-client
+            bound_service_account_names: ["consul-client"]
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-client"]
+            ttl: 1h
+          - name: consul-ca
+            bound_service_account_names:
+              - consul-server
+              - consul-client
+              - consul-server-acl-init
+              - consul-feature-gate-set
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-ca"]
+            ttl: 20m
+          - name: consul-acl-init
+            bound_service_account_names: ["consul-server-acl-init"]
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-acl-init"]
+            ttl: 20m
+          - name: consul-feature-gate
+            bound_service_account_names: ["consul-feature-gate-set"]
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-feature-gate"]
+            ttl: 20m
+          - name: consul-credentials
+            bound_service_account_names: ["consul-vault-bootstrap"]
+            bound_service_account_namespaces: ["consul"]
+            policies: ["consul-credentials"]
+            ttl: 10m
 
     secrets:
       - path: secret
@@ -107,5 +211,31 @@ spec:
               require_cn: false
               ttl: 24h
               max_ttl: 720h
+            - name: consul-server
+              allowed_domains:
+                - server.dc1.consul
+                - consul-server
+                - consul-server.consul
+                - consul-server.consul.svc
+                - consul-server.consul.svc.cluster.local
+                - consul-ui.consul.svc
+                - consul-ui.consul.svc.cluster.local
+                - localhost
+              allow_bare_domains: true
+              allow_subdomains: true
+              allow_localhost: true
+              allow_ip_sans: true
+              server_flag: true
+              client_flag: true
+              key_type: ec
+              key_bits: 256
+              ttl: 24h
+              max_ttl: 72h
+      - path: pki_consul
+        type: pki
+        description: "Consul client auto-encryption intermediate; signed by the shared Vault root"
+        config:
+          default_lease_ttl: 24h
+          max_lease_ttl: 720h
 
   serviceType: ClusterIP
