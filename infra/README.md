@@ -101,6 +101,17 @@ One server is sufficient for a lab, but has no failure tolerance. Restarts,
 upgrades, and node outages interrupt service. Use three or five servers across
 failure domains for HA.
 
+The chart gracefully removes a terminating server from gossip membership. With
+only one server, existing clients can remain without a known server after that
+pod is replaced. If they do not recover, restart the client DaemonSet after the
+server is ready, then verify membership and discovery again:
+
+```sh
+kubectl -n consul rollout status statefulset/consul-server --timeout=300s
+kubectl -n consul rollout restart daemonset/consul-client
+kubectl -n consul rollout status daemonset/consul-client --timeout=300s
+```
+
 The PVC uses the cluster's default storage class (k3d local-path here). It does
 not survive deleting the cluster. Back up Consul snapshots and the generated
 Secrets and Vault data externally: Kubernetes Secrets alone are not a DR backup.
